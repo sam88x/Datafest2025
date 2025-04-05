@@ -1,0 +1,109 @@
+---
+title: "Datafest"
+author: "Matthew Putnam"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+````{r}
+library(caTools)
+library(class)
+library(tidyverse)
+library(MASS)
+library(tree)
+library(rpart)
+library(rpart.plot)
+Leases <- read.csv("C:/Users/mhpdn/Downloads/Leases.csv")
+Leases<-subset(Leases,subset = Leases$transaction_type!='New')
+Missing<-is.na(Leases$transaction_type)|is.na(Leases$market)|is.na(Leases$internal_class)|is.na(Leases$leasedSF)
+
+Leases<-subset(Leases,Missing==FALSE)
+Keep<-c(Leases$year,Leases$monthsigned,Leases$market,Leases$region,Leases$internal_class,Leases$leasedSF,Leases$transaction_type,Leases$space_type,Leases$CBD_suburban,Leases$internal_class_rent,Leases$leasing)
+Leases$transaction_type<-as.factor(Leases$transaction_type)
+Leases$market<-as.factor(Leases$market)
+Leases$space_type<-as.factor(Leases$space_type)
+Leases$internal_industry<-as.factor(Leases$internal_industry)
+Leases$CBD_suburban<-as.factor(Leases$CBD_suburban)
+Leases$leasing<-as.factor(Leases$leasing)
+#Leases<-subset(Leases,select=Keep)
+````
+
+#Split the data into pre-pandemic, pandemic, and post-pandemic. 
+````{r}
+Leases_pre<-Leases[which(Leases$year<2020|Leases$year==2020&Leases$quarter=='Q1'),]
+Leases_pand<-Leases[which(Leases$year==2020&Leases$quarter!='Q1'|Leases$year==2021|Leases$year==2022|Leases$year==2023&Leases$quarter=='Q1|Q2'),]
+Leases_post<-Leases[which(Leases$year==2024|Leases$year==2023&Leases$quarter=='Q3|Q4'),]
+````
+#Plot the data on a barplot
+````{r}
+#par(mfrow=c(3,1))
+table(Leases_pre$transaction_type)
+table(Leases_pand$transaction_type)
+table(Leases_post$transaction_type)
+names<-c('Expansion','Extension','Relocation','Renewal','Renewal and Expansion','Restructure','Sale Leaseback','TBD')
+height_pre<-c(366,53,861,2071,122,46,0,2450)
+height_pand<-c(387,95,1367,2348,172,52,9,1331)
+height_post<-c(149,70,748,1233,110,56,3,251)
+print('pre')
+count=1
+
+pre_prop<-(height_pre/(72247-66035))
+pand_prop<-(height_pand/(68382-62474))
+post_prop<-(height_post/(27744-25036))
+
+barplot(height_pre,names.arg = names,main='Pre-Pandemic',cex.names = 0.45)
+barplot(height_pand,names.arg = names,main='Pandemic',cex.names = 0.45)
+barplot(height_post,names.arg = names,main='Post-Pandemic',cex.names = 0.45)
+````
+#Split the data into test and train sets
+````{r}
+sample<-sample.split(Leases,SplitRatio = 0.8)
+Pre_Train<-subset(Leases_pre,sample==TRUE)
+Pre_Test<-subset(Leases_pre,sample==FALSE)
+Pand_Train<-subset(Leases_pand,sample==TRUE)
+Pand_Test<-subset(Leases_pand,sample==FALSE)
+Post_Train<-subset(Leases_post,sample==TRUE)
+Post_Test<-subset(Leases_post,sample==FALSE)
+````
+#Decision tree analysis
+````{r}
+summary(Leases$internal_industry)
+summary(Leases$market)
+summary(Leases$space_type)
+
+Pre_Model<-tree::tree(transaction_type~year+internal_class_rent+internal_industry+year+market+leasedSF+space_type+CBD_suburban,data = Pre_Train)
+summary(Pre_Model)
+plot(Pre_Model,type='proportional')
+text(Pre_Model)
+Pre_Pred<-predict(Pre_Model,Pre_Test)
+Pre_Pred<-as.data.frame(Pre_Pred)
+max_col_indices<-apply(Pre_Pred, 1, which.max)
+Pre_Pred$Pred<-colnames(Pre_Pred)[max_col_indices]
+Pre_Pred$Actual<-Pre_Test$transaction_type
+Pre_Pred$Correct<-ifelse(Pre_Pred$Pred==Pre_Pred$Actual,1,0)
+mean(Pre_Pred$Correct)
+
+Pand_Model<-tree::tree(transaction_type~year+internal_class_rent+internal_industry+year+market+leasedSF+space_type+CBD_suburban,data = Pand_Train)
+summary(Pand_Model)
+plot(Pand_Model,type='proportional')
+text(Pand_Model)
+Pand_Pred<-predict(Pand_Model,Pand_Test)
+Pand_Pred<-as.data.frame(Pand_Pred)
+max_col_indices<-apply(Pand_Pred, 1, which.max)
+Pand_Pred$Pred<-colnames(Pand_Pred)[max_col_indices]
+Pand_Pred$Actual<-Pand_Test$transaction_type
+Pand_Pred$Correct<-ifelse(Pand_Pred$Pred==Pand_Pred$Actual,1,0)
+mean(Pand_Pred$Correct)
+
+Post_Model<-tree::tree(transaction_type~year+internal_class_rent+internal_industry+year+market+leasedSF+space_type+CBD_suburban,data = Post_Train)
+summary(Post_Model)
+plot(Post_Model,type='proportional')
+text(Post_Model)
+Post_Pred<-predict(Post_Model,Post_Test)
+Post_Pred<-as.data.frame(Post_Pred)
+max_col_indices<-apply(Post_Pred, 1, which.max)
+Post_Pred$Pred<-colnames(Post_Pred)[max_col_indices]
+Post_Pred$Actual<-Post_Test$transaction_type
+Post_Pred$Correct<-ifelse(Post_Pred$Pred==Post_Pred$Actual,1,0)
+mean(Post_Pred$Correct)
+````
